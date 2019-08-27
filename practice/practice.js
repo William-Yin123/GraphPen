@@ -78,7 +78,7 @@ function drawFunc(f, color) {
     for(let x_val of d3.range(x_max)) {
         let x_val_domain = xScale.invert(x_val);
         let y_val_domain = f_code.evaluate({x : x_val_domain});
-        if(!isNaN(y_val_domain)) points.push([x_val_domain, y_val_domain]);
+        if(isFinite(y_val_domain)) points.push([x_val_domain, y_val_domain]);
     }
 
     svg.append("path")
@@ -140,9 +140,6 @@ svg.on("mousemove", function() {
         yScale.domain([yScale.domain()[0] + y_delta, yScale.domain()[1] + y_delta]);
 
         draw(funcs);
-
-        console.log("x_delta = " + x_delta);
-        console.log("y_delta = " + y_delta);
     }
 });
 
@@ -171,41 +168,109 @@ svg.on("mousewheel", function() {
 let clear_button = d3.select("#clear");
 
 clear_button.on("click", function() {
-    d3.selectAll(".field")
+    d3.selectAll(".typing")
         .each(function(d, i) {
             if(i > 0) {
                 this.remove();
             }
         });
+    d3.selectAll(".field")
+        .remove();
     funcs = [];
     draw();
 });
 
-let textbox = d3.select(".expr");
-
-textbox.on("keydown", function() {
-    if(d3.event.keyCode === 13 && this.value) {
-        let new_div = d3.select(".sidebar")
-            .append("div")
+function createDiv(input, createNew) {
+    let new_div;
+    if(!createNew) {
+        new_div = d3.select(input.parentNode)
+            .classed("typing", false)
             .attr("class", "field");
-        new_div.append("input")
-            .attr("class", "expr")
-            .attr("value", this.value)
-            .style("color", d3.schemeCategory10[funcs.length]);
-        new_div.append("button")
-            .attr("class", "delete")
-            .text("-")
-            .datum(funcs.length)
-            .on("click", function() {
+    } else {
+        new_div  = d3.select(".sidebar")
+            .insert("div", ".field")
+            .attr("class", "field");
+    }
+    new_div.append("button")
+        .attr("class", "delete")
+        .text("-")
+        .datum(funcs.length)
+        .on("click", function() {
+            d3.select(this.parentNode)
+                .remove();
+            funcs.splice(d3.select(this)
+                .datum(), 1);
+            draw(funcs);
+        });
+    let fxn = new_div.append("div")
+        .attr("class", "fxn")
+        .text("`" + input.value + "`");
+    if(createNew) {
+        fxn.style("color", d3.schemeCategory10[funcs.length])
+            .datum(funcs.length);
+    } else {
+        fxn.style("color", d3.schemeCategory10[d3.select(input).datum()])
+            .datum(d3.select(input).datum());
+    }
+    fxn.on("click", function() {
+        createInput(this);
+        this.remove();
+    });
+    MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+}
+
+function createInput(div) {
+    let datum = d3.select(div)
+        .datum();
+    d3.select(div.parentNode)
+        .classed("field", false)
+        .attr("class", "typing")
+        .append("input")
+        .attr("class", "expr")
+        .attr("type", "text")
+        .datum(datum)
+        .property("value", funcs[datum])
+        .on("blur", function() {
+            if(!this.value) {
+                funcs.splice(datum, 1);
+                draw(funcs);
                 d3.select(this.parentNode)
                     .remove();
-                funcs.splice(d3.select(this)
-                    .datum(), 1);
-                draw(funcs);
-            });
-        // MathJax.Hub.Queue(["Text", MathJax.Hub.getAllJax(new_element.node())[0], this.value]);
+            } else {
+                createDiv(this, false);
+                this.remove();
+                funcs[datum] = this.value;
+                draw(funcs)
+            }
+        })
+        .on("keydown", function() {
+            if(d3.event.keyCode === 13 && this.value) {
+                this.blur();
+            }
+        })
+        .node()
+        .focus();
+}
+
+let first_fxnbox = d3.select("#first");
+
+first_fxnbox.on("keydown", function() {
+    if(d3.event.keyCode === 13 && this.value) {
+        createDiv(this, true);
         funcs.push(this.value);
         draw(funcs);
         this.value = "";
     }
 });
+
+d3.select("#center")
+    .on("click", function() {
+        yScale = d3.scaleLinear()
+            .domain([-10, 10])
+            .rangeRound([svg_height, 0]);
+
+        xScale = d3.scaleLinear()
+            .domain([svg_width * yScale.domain()[0] / svg_height, svg_width * yScale.domain()[1] / svg_height])
+            .rangeRound([0, svg_width]);
+        draw(funcs);
+    });
