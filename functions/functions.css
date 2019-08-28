@@ -36,10 +36,10 @@ body {
 }
 .func {
     fill: none;
+    stroke-width: 4;
 }
 .func:hover {
-    stroke: #000;
-    stroke-width: 6;
+    stroke-width: 8;
     cursor: pointer;
 }
 .title {
@@ -145,4 +145,29 @@ button:hover {
 .delete:hover {
     color: #B50000;
     border-color: #B50000;
+}
+#tooltip {
+    position: absolute;
+    width: auto;
+    height: auto;
+    padding: 0.25em;
+    background-color: white;
+    -webkit-border-radius: 0.5em;
+    -moz-border-radius: 0.5em;
+    border-radius: 0.5em;
+    -webkit-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+    -moz-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+#tooltip.hidden {
+    display: none;
+}
+#tooltip p {
+    margin: 0;
+    font-family: sans-serif;
+    font-size: 1em;
+}
+#tooltip #eqn {
+    font-weight: bold;
 }

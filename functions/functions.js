@@ -84,7 +84,29 @@ function drawFunc(f, color) {
     svg.append("path")
         .attr("d", line(points))
         .attr("class", "func")
-        .attr("stroke", color);
+        .attr("stroke", color)
+        .on("mouseover", function() {
+            let x_pos = d3.mouse(this)[0];
+            let y_pos = d3.mouse(this)[1];
+
+            let tooltip = d3.select("#tooltip")
+                .classed("hidden", false)
+                .style("left", "calc(" + x_pos + "px + 8em)")
+                .style("top", y_pos + "px");
+
+            tooltip.select("#value")
+                .text("(" + xScale.invert(x_pos).toFixed(3) + ", "
+                + yScale.invert(y_pos).toFixed(3) + ")")
+                .style("color", color);
+
+            tooltip.select("#eqn")
+                .text("y = " + f)
+                .style("color", color);
+        })
+        .on("mouseout", function() {
+            d3.select("#tooltip")
+                .attr("class", "hidden");
+        });
 }
 
 function draw(fs) {
@@ -99,6 +121,7 @@ function draw(fs) {
         drawFunc(fs[i], d3.schemeCategory10[i]);
     }
 }
+
 draw(funcs);
 
 window.onresize = function() {
@@ -191,6 +214,7 @@ function createDiv(input, createNew) {
             .insert("div", ".field")
             .attr("class", "field");
     }
+
     new_div.append("button")
         .attr("class", "delete")
         .text("-")
@@ -202,9 +226,11 @@ function createDiv(input, createNew) {
                 .datum(), 1);
             draw(funcs);
         });
+
     let fxn = new_div.append("div")
         .attr("class", "fxn")
         .text("`" + input.value + "`");
+
     if(createNew) {
         fxn.style("color", d3.schemeCategory10[funcs.length])
             .datum(funcs.length);
@@ -212,16 +238,19 @@ function createDiv(input, createNew) {
         fxn.style("color", d3.schemeCategory10[d3.select(input).datum()])
             .datum(d3.select(input).datum());
     }
+
     fxn.on("click", function() {
         createInput(this);
         this.remove();
     });
+
     MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
 }
 
 function createInput(div) {
     let datum = d3.select(div)
         .datum();
+
     d3.select(div.parentNode)
         .classed("field", false)
         .attr("class", "typing")
