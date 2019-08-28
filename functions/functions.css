@@ -1,3 +1,5 @@
+/* Written by William Yin */
+
 :root {
     box-sizing: border-box;
 }
@@ -170,4 +172,10 @@ button:hover {
 }
 #tooltip #eqn {
     font-weight: bold;
+}
+.invalid {
+    border-color: #F00;
+}
+.invalid:focus {
+    outline: none;
 }

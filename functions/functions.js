@@ -1,3 +1,5 @@
+// Written by William Yin
+
 let svg = d3.select("#graph"),
     svg_node = svg.node(),
     svg_width = svg_node.clientWidth,
@@ -18,12 +20,15 @@ let line = d3.line()
 let funcs = [];
 
 function drawGrid() {
-    let ticks_y = 20;
+    let lines_y = 20;
+    let lines_x = lines_y * svg_width / svg_height;
+    let tick_delta = (yScale.domain()[1] - yScale.domain()[0]) / 20;
+    let ticks_y = Math.abs(lines_y - 4 * Math.abs(Math.log10(tick_delta)));
     let ticks_x = ticks_y * svg_width / svg_height;
 
     svg.append("g")
         .selectAll(".grid_x")
-        .data(yScale.ticks(ticks_y))
+        .data(yScale.ticks(lines_y))
         .enter()
         .append("path")
         .attr("d", d => line([[xScale.domain()[0], d], [xScale.domain()[1], d]]))
@@ -31,7 +36,7 @@ function drawGrid() {
 
     svg.append("g")
         .selectAll(".grid_y")
-        .data(xScale.ticks(ticks_x))
+        .data(xScale.ticks(lines_x))
         .enter()
         .append("path")
         .attr("d", d => line([[d, yScale.domain()[0]], [d, yScale.domain()[1]]]))
@@ -77,8 +82,10 @@ function drawFunc(f, color) {
 
     for(let x_val of d3.range(x_max)) {
         let x_val_domain = xScale.invert(x_val);
-        let y_val_domain = f_code.evaluate({x : x_val_domain});
-        if(isFinite(y_val_domain)) points.push([x_val_domain, y_val_domain]);
+        let y_val_domain = f_code.evaluate({x : x_val_domain, y : f});
+        if(isFinite(y_val_domain)) {
+            points.push([x_val_domain, y_val_domain]);
+        }
     }
 
     svg.append("path")
@@ -174,7 +181,13 @@ svg.on("mouseleave", function() {
 });
 
 svg.on("mousewheel", function() {
-    const zoom = 1.03;
+    if((((yScale.domain()[1] - yScale.domain()[0]) / 20) <= 0.0001) && d3.event.wheelDelta > 0) {
+        return;
+    } else if((((yScale.domain()[1] - yScale.domain()[0]) / 20) >= 2800) && d3.event.wheelDelta < 0) {
+        return;
+    }
+
+    const zoom = 1.06;
     d3.event.preventDefault();
 
     let center_x = (xScale.domain()[1] + xScale.domain()[0]) / 2;
@@ -204,6 +217,13 @@ clear_button.on("click", function() {
 });
 
 function createDiv(input, createNew) {
+    input.value = input.value.toLowerCase();
+    try {
+        math.compile(input.value).evaluate({x : 0, y : input.value});
+    } catch(error) {
+        return new Error("Invalid Input");
+    }
+
     let new_div;
     if(!createNew) {
         new_div = d3.select(input.parentNode)
@@ -229,7 +249,11 @@ function createDiv(input, createNew) {
 
     let fxn = new_div.append("div")
         .attr("class", "fxn")
-        .text("`" + input.value + "`");
+        .text("`y=" + input.value + "`");
+
+    if(input.value.includes("=")) {
+        fxn.text("`" + input.value + "`")
+    }
 
     if(createNew) {
         fxn.style("color", d3.schemeCategory10[funcs.length])
@@ -266,7 +290,10 @@ function createInput(div) {
                 d3.select(this.parentNode)
                     .remove();
             } else {
-                createDiv(this, false);
+                if(createDiv(this, false) instanceof Error) {
+                    return d3.select(this)
+                        .classed("invalid", true);
+                }
                 this.remove();
                 funcs[datum] = this.value;
                 draw(funcs)
@@ -285,7 +312,16 @@ let first_fxnbox = d3.select("#first");
 
 first_fxnbox.on("keydown", function() {
     if(d3.event.keyCode === 13 && this.value) {
-        createDiv(this, true);
+        d3.select(this)
+            .classed("invalid", false);
+        if(funcs.length >= 10) {
+            return d3.select(this)
+                .classed("invalid", true);
+        }
+        if(createDiv(this, true) instanceof Error) {
+            return d3.select(this)
+                .classed("invalid", true);
+        }
         funcs.push(this.value);
         draw(funcs);
         this.value = "";
