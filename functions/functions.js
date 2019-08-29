@@ -19,12 +19,25 @@ let line = d3.line()
 
 let funcs = [];
 
+function chooseColor() {
+    for(let color of d3.schemeCategory10) {
+        let used = false;
+        for(let func of funcs) {
+            if(color === func.color) {
+                used = true;
+                break;
+            }
+        }
+        if(!used) return color;
+    }
+}
+
 function drawGrid() {
-    let lines_y = 20;
-    let lines_x = lines_y * svg_width / svg_height;
-    let tick_delta = (yScale.domain()[1] - yScale.domain()[0]) / 20;
-    let ticks_y = Math.abs(lines_y - 4 * Math.abs(Math.log10(tick_delta)));
-    let ticks_x = ticks_y * svg_width / svg_height;
+    let lines_y = 20,
+        lines_x = lines_y * svg_width / svg_height,
+        tick_delta = (yScale.domain()[1] - yScale.domain()[0]) / 20,
+        ticks_y = Math.abs(lines_y - 4 * Math.abs(Math.log10(tick_delta))),
+        ticks_x = ticks_y * svg_width / svg_height;
 
     svg.append("g")
         .selectAll(".grid_x")
@@ -71,49 +84,62 @@ function drawGrid() {
         .attr("class", "tick_value_y")
 }
 
-function drawFunc(f, color) {
+function drawFunc(f) {
     if(!f) {
         return;
     }
 
-    let points = [];
-    let x_max = xScale.range()[1];
-    let f_code = math.compile(f);
+    let lines_3d = [],
+        x_max = xScale.range()[1],
+        f_code = math.compile(f.expr),
+        line_2d = [],
+        y_prev = null;
 
     for(let x_val of d3.range(x_max)) {
-        let x_val_domain = xScale.invert(x_val);
-        let y_val_domain = f_code.evaluate({x : x_val_domain, y : f});
-        if(isFinite(y_val_domain)) {
-            points.push([x_val_domain, y_val_domain]);
+        let x_val_domain = xScale.invert(x_val),
+            y_val_domain = f_code.evaluate({x : x_val_domain, y : f.expr});
+
+        if(y_val_domain === Number.NEGATIVE_INFINITY ||
+        y_val_domain === Number.POSITIVE_INFINITY ||
+        (y_prev && Math.abs(y_val_domain - y_prev) > 100 &&
+        y_prev * y_val_domain < 0)){
+            if(line_2d.length !== 0) lines_3d.push(line_2d);
+            line_2d = [];
+        } else {
+            line_2d.push([x_val_domain, y_val_domain]);
         }
+        y_prev = y_val_domain;
     }
+    if(line_2d.length !== 0) lines_3d.push(line_2d);
 
-    svg.append("path")
-        .attr("d", line(points))
-        .attr("class", "func")
-        .attr("stroke", color)
-        .on("mouseover", function() {
-            let x_pos = d3.mouse(this)[0];
-            let y_pos = d3.mouse(this)[1];
+    for(let line_points of lines_3d) {
+        svg.append("path")
+            .attr("d", line(line_points))
+            .attr("class", "func")
+            .attr("stroke", f.color)
+            .on("mouseover", function() {
+                let x_pos = d3.mouse(this)[0],
+                    y_pos = d3.mouse(this)[1];
 
-            let tooltip = d3.select("#tooltip")
-                .classed("hidden", false)
-                .style("left", "calc(" + x_pos + "px + 8em)")
-                .style("top", y_pos + "px");
+                let tooltip = d3.select("#tooltip")
+                    .classed("hidden", false)
+                    .style("left", "calc(" + x_pos + "px + 8em)")
+                    .style("top", y_pos + "px");
 
-            tooltip.select("#value")
-                .text("(" + xScale.invert(x_pos).toFixed(3) + ", "
-                + yScale.invert(y_pos).toFixed(3) + ")")
-                .style("color", color);
+                tooltip.select("#value")
+                    .text("(" + xScale.invert(x_pos).toFixed(3) + ", "
+                        + yScale.invert(y_pos).toFixed(3) + ")")
+                    .style("color", f.color);
 
-            tooltip.select("#eqn")
-                .text("y = " + f)
-                .style("color", color);
-        })
-        .on("mouseout", function() {
-            d3.select("#tooltip")
-                .attr("class", "hidden");
-        });
+                tooltip.select("#eqn")
+                    .text("y = " + f.expr)
+                    .style("color", f.color);
+            })
+            .on("mouseout", function() {
+                d3.select("#tooltip")
+                    .attr("class", "hidden");
+            });
+    }
 }
 
 function draw(fs) {
@@ -124,8 +150,8 @@ function draw(fs) {
     if(!fs) {
         return;
     }
-    for(let i in fs) {
-        drawFunc(fs[i], d3.schemeCategory10[i]);
+    for(let f of fs) {
+        drawFunc(f);
     }
 }
 
@@ -183,7 +209,7 @@ svg.on("mouseleave", function() {
 svg.on("mousewheel", function() {
     if((((yScale.domain()[1] - yScale.domain()[0]) / 20) <= 0.0001) && d3.event.wheelDelta > 0) {
         return;
-    } else if((((yScale.domain()[1] - yScale.domain()[0]) / 20) >= 2800) && d3.event.wheelDelta < 0) {
+    } else if((((yScale.domain()[1] - yScale.domain()[0]) / 20) >= 10000) && d3.event.wheelDelta < 0) {
         return;
     }
 
@@ -216,10 +242,10 @@ clear_button.on("click", function() {
     draw();
 });
 
-function createDiv(input, createNew) {
-    input.value = input.value.toLowerCase();
+function createDiv(input, fxn, createNew) {
+    fxn.expr = fxn.expr.toLowerCase();
     try {
-        math.compile(input.value).evaluate({x : 0, y : input.value});
+        math.compile(fxn.expr).evaluate({x : 0, y : fxn.expr});
     } catch(error) {
         return new Error("Invalid Input");
     }
@@ -238,7 +264,7 @@ function createDiv(input, createNew) {
     new_div.append("button")
         .attr("class", "delete")
         .text("-")
-        .datum(funcs.length)
+        .datum(createNew ? funcs.length : d3.select(input).datum())
         .on("click", function() {
             d3.select(this.parentNode)
                 .remove();
@@ -247,23 +273,23 @@ function createDiv(input, createNew) {
             draw(funcs);
         });
 
-    let fxn = new_div.append("div")
+    let fxn_div = new_div.append("div")
         .attr("class", "fxn")
-        .text("`y=" + input.value + "`");
+        .text("`y=" + fxn.expr + "`");
 
     if(input.value.includes("=")) {
-        fxn.text("`" + input.value + "`")
+        fxn_div.text("`" + fxn.expr + "`")
     }
 
     if(createNew) {
-        fxn.style("color", d3.schemeCategory10[funcs.length])
+        fxn_div.style("color", fxn.color)
             .datum(funcs.length);
     } else {
-        fxn.style("color", d3.schemeCategory10[d3.select(input).datum()])
+        fxn_div.style("color", fxn.color)
             .datum(d3.select(input).datum());
     }
 
-    fxn.on("click", function() {
+    fxn_div.on("click", function() {
         createInput(this);
         this.remove();
     });
@@ -282,7 +308,7 @@ function createInput(div) {
         .attr("class", "expr")
         .attr("type", "text")
         .datum(datum)
-        .property("value", funcs[datum])
+        .property("value", funcs[datum].expr)
         .on("blur", function() {
             if(!this.value) {
                 funcs.splice(datum, 1);
@@ -290,12 +316,12 @@ function createInput(div) {
                 d3.select(this.parentNode)
                     .remove();
             } else {
-                if(createDiv(this, false) instanceof Error) {
+                if(createDiv(this, funcs[datum], false) instanceof Error) {
                     return d3.select(this)
                         .classed("invalid", true);
                 }
                 this.remove();
-                funcs[datum] = this.value;
+                funcs[datum].expr = this.value;
                 draw(funcs)
             }
         })
@@ -318,11 +344,12 @@ first_fxnbox.on("keydown", function() {
             return d3.select(this)
                 .classed("invalid", true);
         }
-        if(createDiv(this, true) instanceof Error) {
+        let f = {expr : this.value, color : chooseColor()};
+        if(createDiv(this, f, true) instanceof Error) {
             return d3.select(this)
                 .classed("invalid", true);
         }
-        funcs.push(this.value);
+        funcs.push(f);
         draw(funcs);
         this.value = "";
     }
